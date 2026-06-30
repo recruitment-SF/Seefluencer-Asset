@@ -1,0 +1,20 @@
+{
+  "name": "seefluencer-asset-management",
+  "version": "1.0.0",
+  "description": "HRGA Asset Management System for PT. Seefluencer Digital Kreatif",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^12.4.1",
+    "cookie-session": "^2.1.0",
+    "express": "^4.21.2"
+  }
+}

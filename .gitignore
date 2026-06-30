@@ -1,0 +1,16 @@
+node_modules/
+*.log
+
+# SQLite database + WAL sidecars (never commit data)
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# Local env
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
