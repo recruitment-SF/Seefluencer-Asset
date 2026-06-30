@@ -81,13 +81,8 @@ function createDb(dbPath, opts = {}) {
     return db.prepare('SELECT * FROM users WHERE email = ?').get(String(email || '').trim().toLowerCase());
   }
 
-  /** Insert seed data and the default account only when the tables are empty. */
+  /** Insert seed data only into collection tables that are still empty (first run). */
   function seedIfEmpty() {
-    const seedEmail = (opts.seedEmail || process.env.AUTH_SEED_EMAIL || DEFAULT_EMAIL)
-      .trim()
-      .toLowerCase();
-    const seedPassword = opts.seedPassword || process.env.AUTH_SEED_PASSWORD || DEFAULT_PASSWORD;
-
     const insertMany = db.transaction((c, rows) => {
       const stmt = db.prepare(`INSERT INTO ${c}(data) VALUES(?)`);
       for (const row of rows) {
@@ -100,21 +95,39 @@ function createDb(dbPath, opts = {}) {
       const count = db.prepare(`SELECT COUNT(*) AS n FROM ${c}`).get().n;
       if (count === 0) insertMany(c, seed[c] || []);
     }
+  }
 
-    const userCount = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
-    if (userCount === 0) {
-      const hash = bcrypt.hashSync(seedPassword, BCRYPT_ROUNDS);
+  /**
+   * Make the env-defined admin account the source of truth on every boot:
+   * create it if missing, and update its password when AUTH_SEED_PASSWORD changes.
+   * Asset data is never touched here. Changing AUTH_SEED_EMAIL creates a new admin;
+   * the previous account row remains until removed manually.
+   */
+  function ensureAdminAccount() {
+    const email = (opts.seedEmail || process.env.AUTH_SEED_EMAIL || DEFAULT_EMAIL)
+      .trim()
+      .toLowerCase();
+    const password = opts.seedPassword || process.env.AUTH_SEED_PASSWORD || DEFAULT_PASSWORD;
+
+    const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    if (!existing) {
       db.prepare('INSERT INTO users(email, password_hash, created_at) VALUES(?,?,?)').run(
-        seedEmail,
-        hash,
+        email,
+        bcrypt.hashSync(password, BCRYPT_ROUNDS),
         new Date().toISOString()
       );
-      if (seedPassword === DEFAULT_PASSWORD) {
-        console.warn(
-          '[auth] WARNING: seeded login uses the DEFAULT password. Set AUTH_SEED_PASSWORD ' +
-            'to a strong value before real use.'
-        );
-      }
+    } else if (!bcrypt.compareSync(password, existing.password_hash)) {
+      db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(
+        bcrypt.hashSync(password, BCRYPT_ROUNDS),
+        email
+      );
+    }
+
+    if (password === DEFAULT_PASSWORD) {
+      console.warn(
+        '[auth] WARNING: admin login uses the DEFAULT password. Set AUTH_SEED_PASSWORD ' +
+          'to a strong value before real use.'
+      );
     }
   }
 
@@ -127,6 +140,7 @@ function createDb(dbPath, opts = {}) {
     remove,
     findUserByEmail,
     seedIfEmpty,
+    ensureAdminAccount,
     close: () => db.close(),
   };
 }

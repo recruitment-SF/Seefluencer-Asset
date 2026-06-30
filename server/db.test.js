@@ -26,6 +26,7 @@ test('creates tables and seeds collections + user on first open', () => {
   const p = tmpDbPath();
   const api = createDb(p, { seedEmail: 'Admin@Example.com', seedPassword: 'pw123' });
   api.seedIfEmpty();
+  api.ensureAdminAccount();
 
   assert.equal(api.listAll('umum').length, 142);
   assert.equal(api.listAll('tb').length, 2);
@@ -44,12 +45,46 @@ test('does not re-seed when data already present', () => {
   const p = tmpDbPath();
   let api = createDb(p, { seedPassword: 'pw' });
   api.seedIfEmpty();
+  api.ensureAdminAccount();
   api.close();
 
   api = createDb(p, { seedPassword: 'pw' });
   api.seedIfEmpty();
+  api.ensureAdminAccount();
   assert.equal(api.listAll('umum').length, 142, 'umum not duplicated');
   assert.equal(api.db.prepare('SELECT COUNT(*) AS n FROM users').get().n, 1, 'user not duplicated');
+  api.close();
+  cleanup(p);
+});
+
+test('ensureAdminAccount updates the password when AUTH_SEED_PASSWORD changes', () => {
+  const p = tmpDbPath();
+  let api = createDb(p, { seedEmail: 'a@x.com', seedPassword: 'old-pass' });
+  api.seedIfEmpty();
+  api.ensureAdminAccount();
+  api.close();
+
+  // Reopen the same DB with a new password (simulates editing .env + redeploy).
+  api = createDb(p, { seedEmail: 'a@x.com', seedPassword: 'new-pass' });
+  api.ensureAdminAccount();
+  const u = api.findUserByEmail('a@x.com');
+  assert.equal(bcrypt.compareSync('new-pass', u.password_hash), true, 'new password works');
+  assert.equal(bcrypt.compareSync('old-pass', u.password_hash), false, 'old password rejected');
+  assert.equal(api.db.prepare('SELECT COUNT(*) AS n FROM users').get().n, 1, 'still a single admin');
+  api.close();
+  cleanup(p);
+});
+
+test('ensureAdminAccount is a no-op when the password is unchanged', () => {
+  const p = tmpDbPath();
+  let api = createDb(p, { seedEmail: 'a@x.com', seedPassword: 'same-pass' });
+  api.ensureAdminAccount();
+  const hashBefore = api.findUserByEmail('a@x.com').password_hash;
+  api.close();
+
+  api = createDb(p, { seedEmail: 'a@x.com', seedPassword: 'same-pass' });
+  api.ensureAdminAccount();
+  assert.equal(api.findUserByEmail('a@x.com').password_hash, hashBefore, 'hash not rewritten');
   api.close();
   cleanup(p);
 });

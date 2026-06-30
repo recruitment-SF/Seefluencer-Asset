@@ -14,6 +14,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 const store = createDb(DB_PATH);
 store.seedIfEmpty();
+store.ensureAdminAccount();
 
 const app = express();
 app.locals.store = store;
