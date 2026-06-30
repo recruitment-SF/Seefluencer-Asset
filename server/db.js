@@ -11,7 +11,7 @@ const seed = require('./seed');
 
 const COLLECTIONS = ['umum', 'tb', 'hp', 'habis'];
 const DEFAULT_EMAIL = 'admin@seefluencer.com';
-const DEFAULT_PASSWORD = 'seefluencer';
+const DEFAULT_PASSWORD = 'seefluencer123';
 const BCRYPT_ROUNDS = 10;
 
 /**

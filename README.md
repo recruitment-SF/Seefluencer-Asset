@@ -17,7 +17,7 @@ berbasis akun di database. Dideploy sebagai **satu image Docker** untuk VPS atau
 | `DB_PATH` | tidak | `./data/app.db` | Path file SQLite. Di Docker/Dokploy gunakan `/data/app.db` (volume). |
 | `COOKIE_SECRET` | **ya (produksi)** | acak per-boot | Kunci penandatangan cookie sesi. Jika kosong, sesi reset tiap restart. |
 | `AUTH_SEED_EMAIL` | tidak | `admin@seefluencer.com` | Email akun default (dibuat sekali, saat DB pertama kali kosong). |
-| `AUTH_SEED_PASSWORD` | tidak | `seefluencer` | Password akun default. **Ganti sebelum dipakai sungguhan.** |
+| `AUTH_SEED_PASSWORD` | tidak | `seefluencer123` | Password akun default. **Ganti sebelum dipakai sungguhan.** |
 | `NODE_ENV` | tidak | `development` | `production` mengaktifkan flag cookie `Secure` (butuh proxy TLS di depan). |
 
 > Akun login hanya dibuat **sekali**, saat database masih kosong. Mengubah
@@ -85,7 +85,7 @@ container di-restart atau di-update.
 ## Akun default & keamanan
 
 - Login pertama memakai `AUTH_SEED_EMAIL` / `AUTH_SEED_PASSWORD`
-  (default: `admin@seefluencer.com` / `seefluencer`).
+  (default: `admin@seefluencer.com` / `seefluencer123`).
 - **Wajib ganti** password default lewat `AUTH_SEED_PASSWORD` pada deploy pertama
   (saat DB masih kosong). App akan mencetak peringatan jika password default dipakai.
 - Password disimpan ter-hash (bcrypt). Sesi memakai cookie httpOnly bertanda tangan.
