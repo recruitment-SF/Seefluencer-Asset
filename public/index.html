@@ -41,6 +41,11 @@ select.sel{padding:7px 10px;background:var(--s1);border:1px solid var(--b1);bord
 .vtabs{display:flex;border:1px solid var(--b1);border-radius:var(--r);overflow:hidden;}
 .vtab{padding:6px 13px;font-size:12px;cursor:pointer;background:none;border:none;color:var(--t2);font-family:inherit;}
 .vtab.on{background:var(--s2);color:var(--t1);font-weight:500;}
+.btn:disabled{opacity:.45;cursor:default;}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap;}
+.pager-info{font-size:11px;color:var(--t3);}
+.pager-ctl{display:flex;align-items:center;gap:8px;}
+.pager-pg{font-size:12px;color:var(--t2);min-width:84px;text-align:center;}
 .tbl-wrap{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;}
 table{width:100%;border-collapse:collapse;}
 thead th{background:var(--s2);padding:9px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;}
@@ -137,9 +142,10 @@ tbody td{padding:9px 12px;vertical-align:middle;font-size:12px;max-width:200px;o
     <div class="ph-right"><button class="btn" onclick="expCSV()">Export CSV</button><button class="btn btn-acc" onclick="openAdd()">+ Tambah Aset</button></div></div>
     <div class="stats" id="inv-stats"></div>
     <div class="toolbar">
-      <div class="srch"><span class="srch-ico">&#128269;</span><input type="text" id="inv-srch" placeholder="Cari nama, kode, kategori..." oninput="renderInv()"></div>
-      <select class="sel" id="inv-fkat" onchange="renderInv()"><option value="">Semua kategori</option><option>Electronic</option><option>Furniture</option><option>IT &amp; Komputer</option><option>Multimedia</option></select>
-      <select class="sel" id="inv-fkond" onchange="renderInv()"><option value="">Semua kondisi</option><option>Baik</option><option>Belum Diidentifikasi</option></select>
+      <div class="srch"><span class="srch-ico">&#128269;</span><input type="text" id="inv-srch" placeholder="Cari nama, kode, kategori..." oninput="invFilterChanged()"></div>
+      <select class="sel" id="inv-fkat" onchange="invFilterChanged()"><option value="">Semua kategori</option><option>Electronic</option><option>Furniture</option><option>IT &amp; Komputer</option><option>Multimedia</option></select>
+      <select class="sel" id="inv-fkond" onchange="invFilterChanged()"><option value="">Semua kondisi</option><option>Baik</option><option>Belum Diidentifikasi</option></select>
+      <select class="sel" id="inv-psize" onchange="invSetPageSize(this.value)"><option value="20">20 / halaman</option><option value="50" selected>50 / halaman</option><option value="100">100 / halaman</option></select>
       <div class="vtabs"><button class="vtab on" onclick="setView('t',this)">Tabel</button><button class="vtab" onclick="setView('g',this)">Grid</button></div>
     </div>
     <div id="inv-tbl"><div class="tbl-wrap"><table>
@@ -147,6 +153,7 @@ tbody td{padding:9px 12px;vertical-align:middle;font-size:12px;max-width:200px;o
       <tbody id="inv-tbody"></tbody>
     </table></div></div>
     <div id="inv-grid" style="display:none"><div class="gcards" id="inv-gcards"></div></div>
+    <div class="pager" id="inv-pager"></div>
   </div>
   <div class="page" id="page-habis"><div class="ph"><div><div class="ph-title">Aset Habis Pakai</div><div class="ph-sub">Pantau stok kantor</div></div><div class="ph-right"><button class="btn btn-acc" onclick="openAddHabis()">+ Tambah</button></div></div><div class="hb-cards" id="hb-cards"></div></div>
   <div class="page" id="page-sched"><div class="ph"><div><div class="ph-title">Jadwal Perawatan Rutin</div></div></div><div id="sched-alert" style="margin-bottom:12px"></div><div class="mc-cards" id="mc-cards"></div></div>
@@ -163,7 +170,7 @@ tbody td{padding:9px 12px;vertical-align:middle;font-size:12px;max-width:200px;o
 <div class="toast" id="toast"></div>
 <script>
 
-var umum=[],tbData=[],hpData=[],habisData=[],editId=null,svcId=null,curView='t';
+var umum=[],tbData=[],hpData=[],habisData=[],editId=null,svcId=null,curView='t',curPage=1,pageSize=50;
 function api(method,url,body,onOk){fetch(url,{method:method,headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined}).then(function(r){if(r.status===401){location.href='/login';return;}if(!r.ok){showToast('Gagal menyimpan ke server.');return;}return r.json().then(function(data){if(onOk)onOk(data);});}).catch(function(){showToast('Gagal terhubung ke server.');});}
 function logout(){fetch('/api/logout',{method:'POST'}).then(function(){location.href='/login';}).catch(function(){location.href='/login';});}
 function init(){
@@ -198,8 +205,8 @@ function nav(p){
   if(p==='sched')renderSched();
   if(p==='lap')renderLap();
 }
-function qfilt(k){nav('inv');document.getElementById('inv-fkat').value=k;renderInv();}
-function qkond(k){nav('inv');document.getElementById('inv-fkond').value=k;renderInv();}
+function qfilt(k){nav('inv');document.getElementById('inv-fkat').value=k;invFilterChanged();}
+function qkond(k){nav('inv');document.getElementById('inv-fkond').value=k;invFilterChanged();}
 function getFiltered(){
   var q=document.getElementById('inv-srch').value.toLowerCase();
   var fk=document.getElementById('inv-fkat').value;
@@ -207,7 +214,7 @@ function getFiltered(){
   return umum.filter(function(a){
     var m=!q||(a.nama||'').toLowerCase().indexOf(q)>-1||(a.kode||'').toLowerCase().indexOf(q)>-1||(a.kategori||'').toLowerCase().indexOf(q)>-1||(a.lokasi||'').toLowerCase().indexOf(q)>-1;
     return m&&(!fk||a.kategori===fk)&&(!fkond||a.kondisi===fkond);
-  });
+  }).sort(function(a,b){return (b.id||0)-(a.id||0);});
 }
 function renderStats(){
   var t=umum.length,baik=umum.filter(function(a){return a.kondisi==='Baik';}).length,warn=umum.filter(function(a){return a.kondisi!=='Baik';}).length,nilai=umum.reduce(function(s,a){return s+(Number(a.harga_perolehan)||0);},0);
@@ -215,23 +222,35 @@ function renderStats(){
   document.getElementById('inv-sub').textContent=t+' aset terdaftar \u2014 PT. Seefluencer Digital Kreatif';
 }
 function renderInv(){
-  var list=getFiltered(),rows='',cards='';
+  var all=getFiltered(),total=all.length;
+  var totalPages=Math.max(1,Math.ceil(total/pageSize));
+  if(curPage>totalPages)curPage=totalPages;
+  if(curPage<1)curPage=1;
+  var start=(curPage-1)*pageSize,list=all.slice(start,start+pageSize),rows='',cards='';
   if(curView==='t'){
-    if(!list.length){document.getElementById('inv-tbody').innerHTML='<tr><td colspan="7"><div class="empty">Tidak ada aset ditemukan</div></td></tr>';return;}
-    for(var i=0;i<list.length;i++){var a=list[i];var kl=a.maintenance_schedule?'Baik \u2014 Terjadwal':a.kondisi;rows+='<tr onclick="openDet('+a.id+')"><td>'+thumb(a)+'</td><td><div class="td-name">'+a.nama+'</div><div class="td-code">'+a.kode+'</div></td><td style="color:var(--t3);font-size:10px;font-family:monospace">'+a.kode+'</td><td style="color:var(--t2)">'+a.kategori+'</td><td style="font-size:11px;color:var(--t2)">'+(a.qty>1?a.qty+'x ':'')+rp(a.harga_perolehan)+'</td><td>'+bdg(kl)+'</td><td onclick="event.stopPropagation()"><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openDet('+a.id+')">Detail</button><button class="btn btn-sm" onclick="openEdit('+a.id+')">Edit</button></div></td></tr>';}
-    document.getElementById('inv-tbody').innerHTML=rows;
+    if(!list.length){document.getElementById('inv-tbody').innerHTML='<tr><td colspan="7"><div class="empty">Tidak ada aset ditemukan</div></td></tr>';}
+    else{for(var i=0;i<list.length;i++){var a=list[i];var kl=a.maintenance_schedule?'Baik \u2014 Terjadwal':a.kondisi;rows+='<tr onclick="openDet('+a.id+')"><td>'+thumb(a)+'</td><td><div class="td-name">'+a.nama+'</div><div class="td-code">'+a.kode+'</div></td><td style="color:var(--t3);font-size:10px;font-family:monospace">'+a.kode+'</td><td style="color:var(--t2)">'+a.kategori+'</td><td style="font-size:11px;color:var(--t2)">'+(a.qty>1?a.qty+'x ':'')+rp(a.harga_perolehan)+'</td><td>'+bdg(kl)+'</td><td onclick="event.stopPropagation()"><div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="openDet('+a.id+')">Detail</button><button class="btn btn-sm" onclick="openEdit('+a.id+')">Edit</button></div></td></tr>';}document.getElementById('inv-tbody').innerHTML=rows;}
   } else {
-    if(!list.length){document.getElementById('inv-gcards').innerHTML='<div class="empty">Tidak ada aset</div>';return;}
-    for(var i=0;i<list.length;i++){var a=list[i];cards+='<div class="gc" onclick="openDet('+a.id+')">'+'<div class="gc-img">'+(a.emoji||'?')+'</div>'+'<div class="gc-body"><div class="gc-name">'+a.nama+'</div><div class="gc-code">'+a.kode+'</div>'+bdg(a.kondisi)+'<div class="gc-price">'+rp(a.harga_perolehan)+'</div></div></div>';}
-    document.getElementById('inv-gcards').innerHTML=cards;
+    if(!list.length){document.getElementById('inv-gcards').innerHTML='<div class="empty">Tidak ada aset</div>';}
+    else{for(var i=0;i<list.length;i++){var a=list[i];cards+='<div class="gc" onclick="openDet('+a.id+')">'+'<div class="gc-img">'+(a.emoji||'?')+'</div>'+'<div class="gc-body"><div class="gc-name">'+a.nama+'</div><div class="gc-code">'+a.kode+'</div>'+bdg(a.kondisi)+'<div class="gc-price">'+rp(a.harga_perolehan)+'</div></div></div>';}document.getElementById('inv-gcards').innerHTML=cards;}
   }
+  renderPager(total,totalPages,start,list.length);
 }
+function renderPager(total,totalPages,start,shown){
+  var el=document.getElementById('inv-pager');if(!el)return;
+  if(!total){el.innerHTML='';return;}
+  var from=start+1,to=start+shown;
+  el.innerHTML='<div class="pager-info">Menampilkan '+from+'\u2013'+to+' dari '+total+' aset</div><div class="pager-ctl"><button class="btn btn-sm" '+(curPage<=1?'disabled':'')+' onclick="invGoPage('+(curPage-1)+')">\u2039 Sebelumnya</button><span class="pager-pg">Hal '+curPage+' / '+totalPages+'</span><button class="btn btn-sm" '+(curPage>=totalPages?'disabled':'')+' onclick="invGoPage('+(curPage+1)+')">Berikutnya \u203a</button></div>';
+}
+function invFilterChanged(){curPage=1;renderInv();}
+function invSetPageSize(v){pageSize=Number(v)||50;curPage=1;renderInv();}
+function invGoPage(p){curPage=p;renderInv();}
 function setView(v,el){curView=v;el.parentElement.querySelectorAll('.vtab').forEach(function(t){t.classList.remove('on');});el.classList.add('on');document.getElementById('inv-tbl').style.display=v==='t'?'':'none';document.getElementById('inv-grid').style.display=v==='g'?'':'none';renderInv();}
 function openAdd(){editId=null;document.getElementById('add-ttl').textContent='Tambah Aset Baru';['f-nama','f-kode','f-emoji','f-tgl','f-lok','f-cat','f-svc'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('f-kode').value='SSM-NEW-'+String(nid(umum)).padStart(3,'0');document.getElementById('f-qty').value=1;document.getElementById('f-harga').value='';document.getElementById('f-kat').value='Electronic';document.getElementById('f-kond').value='Baik';document.getElementById('f-maint').value='';var p=document.getElementById('add-prev');p.innerHTML='';p.textContent='?';document.getElementById('ov-add').classList.add('on');document.getElementById('f-nama').focus();}
 function openEdit(id){editId=id;var a=umum.find(function(x){return x.id===id;});if(!a)return;document.getElementById('add-ttl').textContent='Edit Aset';document.getElementById('f-nama').value=a.nama||'';document.getElementById('f-kode').value=a.kode||'';document.getElementById('f-emoji').value=a.emoji||'';document.getElementById('f-kat').value=a.kategori||'Electronic';document.getElementById('f-tgl').value=a.tanggal||'';document.getElementById('f-qty').value=a.qty||1;document.getElementById('f-harga').value=a.harga_satuan||'';document.getElementById('f-lok').value=a.lokasi||'';document.getElementById('f-kond').value=a.kondisi||'Baik';document.getElementById('f-cat').value=a.catatan||'';var ms=a.maintenance_schedule;document.getElementById('f-maint').value=ms?ms.interval_bulan:'';document.getElementById('f-svc').value=ms?ms.last_service||'':'';var p=document.getElementById('add-prev');p.innerHTML='';p.textContent=a.emoji||'?';document.getElementById('ov-add').classList.add('on');}
 function prevEmoji(v){var p=document.getElementById('add-prev');p.innerHTML='';p.textContent=v||'?';}
 function calcNext(l,m){if(!l||!m)return null;var d=new Date(l);d.setMonth(d.getMonth()+m);return d.toISOString().split('T')[0];}
-function saveAset(){var nama=document.getElementById('f-nama').value.trim(),kode=document.getElementById('f-kode').value.trim();if(!nama||!kode){showToast('Nama dan kode wajib.');return;}var qty=Number(document.getElementById('f-qty').value)||1,hsat=Number(document.getElementById('f-harga').value)||0,mi=document.getElementById('f-maint').value,ls=document.getElementById('f-svc').value,ms=mi?{interval_bulan:Number(mi),last_service:ls||null,next_service:calcNext(ls,Number(mi)),notes:''}:null,obj={nama:nama,kode:kode,emoji:document.getElementById('f-emoji').value||'?',image:null,kategori:document.getElementById('f-kat').value,tanggal:document.getElementById('f-tgl').value,qty:qty,harga_satuan:hsat,harga_perolehan:hsat*qty,kondisi:document.getElementById('f-kond').value,lokasi:document.getElementById('f-lok').value.trim(),catatan:document.getElementById('f-cat').value.trim(),maintenance_schedule:ms};if(editId){api('PUT','/api/umum/'+editId,obj,function(u){var idx=umum.findIndex(function(x){return x.id===editId;});umum[idx]=u;showToast('Aset diperbarui.');closeAll();renderStats();renderInv();updateBadges();});}else{api('POST','/api/umum',obj,function(u){umum.push(u);showToast('Aset ditambahkan.');closeAll();renderStats();renderInv();updateBadges();});}}
+function saveAset(){var nama=document.getElementById('f-nama').value.trim(),kode=document.getElementById('f-kode').value.trim();if(!nama||!kode){showToast('Nama dan kode wajib.');return;}var qty=Number(document.getElementById('f-qty').value)||1,hsat=Number(document.getElementById('f-harga').value)||0,mi=document.getElementById('f-maint').value,ls=document.getElementById('f-svc').value,ms=mi?{interval_bulan:Number(mi),last_service:ls||null,next_service:calcNext(ls,Number(mi)),notes:''}:null,obj={nama:nama,kode:kode,emoji:document.getElementById('f-emoji').value||'?',image:null,kategori:document.getElementById('f-kat').value,tanggal:document.getElementById('f-tgl').value,qty:qty,harga_satuan:hsat,harga_perolehan:hsat*qty,kondisi:document.getElementById('f-kond').value,lokasi:document.getElementById('f-lok').value.trim(),catatan:document.getElementById('f-cat').value.trim(),maintenance_schedule:ms};if(editId){api('PUT','/api/umum/'+editId,obj,function(u){var idx=umum.findIndex(function(x){return x.id===editId;});umum[idx]=u;showToast('Aset diperbarui.');closeAll();renderStats();renderInv();updateBadges();});}else{api('POST','/api/umum',obj,function(u){umum.push(u);showToast('Aset ditambahkan.');closeAll();curPage=1;renderStats();renderInv();updateBadges();});}}
 function delAset(id){if(!confirm('Hapus aset ini?'))return;api('DELETE','/api/umum/'+id,null,function(){umum=umum.filter(function(x){return x.id!==id;});closeAll();renderStats();renderInv();updateBadges();showToast('Dihapus.');});}
 function openDet(id){var a=umum.find(function(x){return x.id===id;});if(!a)return;var ms=a.maintenance_schedule,kl=ms?'Baik \u2014 Terjadwal':a.kondisi;document.getElementById('det-body').innerHTML=bigImg(a)+'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div style="font-size:16px;font-weight:700">'+a.nama+'</div>'+bdg(kl)+'</div><div style="font-size:10px;color:var(--t3);font-family:monospace;margin-bottom:11px">'+a.kode+'</div><div class="det-grid"><div><div class="det-lbl">Kategori</div><div class="det-val">'+(a.kategori||'\u2014')+'</div></div><div><div class="det-lbl">Lokasi/Pengguna</div><div class="det-val">'+(a.lokasi||'\u2014')+'</div></div><div><div class="det-lbl">QTY</div><div class="det-val">'+(a.qty||1)+' unit</div></div><div><div class="det-lbl">Harga satuan</div><div class="det-val">'+rp(a.harga_satuan)+'</div></div><div><div class="det-lbl">Total perolehan</div><div class="det-val">'+rp(a.harga_perolehan)+'</div></div><div><div class="det-lbl">Tanggal beli</div><div class="det-val">'+fmtD(a.tanggal)+'</div></div></div>'+(ms?'<div style="margin-top:11px;background:var(--teal-bg);border:1px solid var(--teal);border-radius:var(--r);padding:10px;font-size:12px"><div style="font-weight:600;color:var(--teal);margin-bottom:5px">Jadwal perawatan rutin</div><div>Interval: '+ms.interval_bulan+' bulan</div><div>Terakhir: '+fmtD(ms.last_service)+'</div><div>Berikutnya: '+fmtD(ms.next_service)+'</div></div>':'')+(a.catatan?'<div style="margin-top:9px;padding:9px;background:var(--s2);border-radius:var(--r);font-size:12px;color:var(--t2);border:1px solid var(--b1)">'+a.catatan+'</div>':'');document.getElementById('det-ft').innerHTML='<button class="btn btn-del btn-sm" onclick="delAset('+id+')">Hapus</button><button class="btn btn-sm" onclick="closeAll()">Tutup</button>'+(ms?'<button class="btn btn-warn btn-sm" onclick="closeAll();openSvc('+id+')">Catat Service</button>':'')+'<button class="btn btn-acc btn-sm" onclick="closeAll();openEdit('+id+')">Edit</button>';document.getElementById('ov-det').classList.add('on');}
 function openSvc(id){svcId=id;var a=umum.find(function(x){return x.id===id;});document.getElementById('svc-nama').textContent=a?a.nama:'';document.getElementById('svc-tgl').value=new Date().toISOString().split('T')[0];document.getElementById('svc-cat').value='';document.getElementById('ov-svc').classList.add('on');}
